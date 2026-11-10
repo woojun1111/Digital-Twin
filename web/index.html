@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0b111a"><title>엔진 가상 실험실 · Digital Twin</title>
+<link rel="stylesheet" href="style.css"></head><body>
+<header><a class="brand" href="#"><span class="mark">◈</span> DIGITAL TWIN <span class="divider">/</span> <span class="subbrand">PROPULSION LAB</span></a><span class="version">V0.2 · 개념 시뮬레이터</span></header>
+<main><div class="intro"><div><p class="eyebrow">AEROSPACE / VIRTUAL TEST BENCH</p><h1>엔진 가상 실험실<span>직접 움직이고, 비교하고, 이해하세요.</span></h1></div><span class="ready"><i></i> 브라우저에서 계산 중</span></div>
+<div class="layout"><section class="workspace" aria-label="3D 엔진 실험 공간">
+<div class="scene-head"><div><span class="eyebrow">ENGINE 001</span><h2>터보팬 <small>분리 배기형 · BPR 5.0</small></h2></div><div class="view-buttons"><button id="view-side">측면</button><button id="view-front">정면</button><button id="view-home">시점 초기화</button></div></div>
+<div id="viewport"><canvas id="engine" tabindex="0" aria-label="3D 터보팬. 드래그 또는 방향키로 회전, 휠 또는 더하기 빼기 키로 확대 축소"></canvas><div class="scene-badge">3D INTERACTIVE VIEW<span>팬 → 압축기 → 연소기 → 터빈 → 노즐</span></div><div class="scene-legend"><span><b class="cyan"></b> 흡입·바이패스</span><span><b class="orange"></b> 고온 코어</span></div><p class="gesture">드래그 회전 · 휠 확대/축소 · 방향키 회전</p></div>
+<div class="scene-tools"><button id="pause" aria-pressed="false">Ⅱ 회전 일시정지</button><label><input id="cutaway" type="checkbox" checked> 내부 보기</label><label><input id="flow" type="checkbox" checked> 흐름 표시</label><button id="fullscreen">전체 화면 ↗</button></div>
+<div class="metrics" aria-live="polite"><article><p>순추력</p><strong id="thrust">—</strong><span>kN</span><small id="thrust-delta"></small></article><article><p>연료 유량</p><strong id="fuel">—</strong><span>kg/s</span></article><article><p>압축기 출구 전온도</p><strong id="temperature">—</strong><span>K</span></article><article><p>압축기 출구 전압력</p><strong id="pressure">—</strong><span>kPa</span></article></div>
+<section class="chart-section"><div class="section-title"><h2>엔진 내부 상태</h2><span>현재 조건의 정상상태 계산</span></div><div id="chart" aria-label="구성품별 전온도 그래프"></div><div class="station-table" id="stations"></div></section>
+</section><aside>
+<section class="panel"><div class="section-title"><h2>운전 조건</h2><span class="live-tag">LIVE</span></div><p class="muted">슬라이더를 움직이면 계산 결과가 바뀝니다.</p>
+<div class="presets"><button data-preset="ground" class="selected">지상 기준</button><button data-preset="cruise">순항 예시</button><button data-preset="degraded">효율 저하</button></div>
+<div class="control"><label for="power">운전 수준 <output id="power-value"></output></label><input id="power" type="range" min=".2" max="1" step=".01" value=".75"><div class="range-label"><span>20%</span><span>100%</span></div></div>
+<div class="control"><label for="altitude_m">고도 <output id="altitude_m-value"></output></label><input id="altitude_m" type="range" min="0" max="11000" step="100" value="0"><div class="range-label"><span>해수면</span><span>11,000 m</span></div></div>
+<div class="control"><label for="mach">비행 마하수 <output id="mach-value"></output></label><input id="mach" type="range" min="0" max=".85" step=".01" value="0"><div class="range-label"><span>0.00</span><span>0.85</span></div></div>
+<div class="control"><label for="compressor_loss">압축기 효율 손실 <output id="compressor_loss-value"></output></label><input id="compressor_loss" type="range" min="0" max=".15" step=".005" value="0"><div class="range-label"><span>정상 0%</span><span>15%</span></div></div>
+<div class="explain"><span>실험 포인트</span><p>같은 운전 조건에서 효율 손실을 높여 보세요. 압축기 출구 온도와 추력 변화를 비교할 수 있습니다.</p></div>
+<button class="primary" id="save">현재 결과 CSV 저장 ↓</button><button class="secondary" id="reset">모든 조건 초기화</button><p id="notice" role="status"></p></section>
+<section class="panel comparison"><div class="section-title"><h2>정상 상태와 비교</h2><span>동일 운전 조건</span></div><div><span>정상 추력</span><b id="healthy">—</b></div><div><span>현재 추력</span><b id="current">—</b></div><div><span>압축기 효율</span><b id="efficiency">—</b></div><p class="muted">정상은 효율 손실 0% 조건입니다.</p></section>
+<details class="panel"><summary>모델 범위와 계산 근거</summary><p>교육용 터보팬 정상상태 모델입니다. 실제 기종에 보정되지 않았으며, 회전·흐름은 설명용 표현입니다. 형상에서 유동장을 계산하는 CFD와 VR 헤드셋 모드는 포함하지 않습니다.</p><p>입력은 즉시 새 평형 상태로 계산합니다. 시간에 따른 회전 관성, 센서 동기화, 수명 예측은 후속 단계입니다.</p><a href="https://github.com/woojun1111/Digital-Twin/blob/main/docs/model.md" target="_blank" rel="noopener">수식·가정 보기 ↗</a></details>
+</aside></div><footer>ENGINE LAB / 001 <span>데이터와 가상 모델을 연결하는 첫 번째 실험.</span><a href="https://github.com/woojun1111/Digital-Twin" target="_blank" rel="noopener">GitHub 소스 ↗</a></footer></main>
+<script src="model.js"></script><script src="viewer.js"></script><script src="app.js"></script></body></html>
