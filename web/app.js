@@ -1,63 +1,58 @@
-(function(){
-  const $=id=>document.getElementById(id), keys=['power','altitude_m','mach','compressor_loss'];
-  const presets={ground:{power:.75,altitude_m:0,mach:0,compressor_loss:0},
-    cruise:{power:.7,altitude_m:10000,mach:.78,compressor_loss:0},
-    degraded:{power:.75,altitude_m:0,mach:0,compressor_loss:.1}};
-  let viewer=null,result=null,controls=null;
-  try{viewer=new EngineViewer($('engine'));}catch(error){$('notice').textContent=error.message;}
-  const names=['흡입구','팬','압축기','연소기','터빈'];
-  function update(){
-    controls=Object.fromEntries(keys.map(k=>[k,Number($(k).value)]));
-    $('power-value').textContent=Math.round(controls.power*100)+'%';
-    $('altitude_m-value').textContent=controls.altitude_m.toLocaleString('ko-KR')+' m';
-    $('mach-value').textContent=controls.mach.toFixed(2)+' M';
-    $('compressor_loss-value').textContent=(controls.compressor_loss*100).toFixed(1)+'%';
-    try{
-      result=EngineModel.simulate(controls);
-      const healthy=EngineModel.simulate({...controls,compressor_loss:0});
-      $('thrust').textContent=(result.thrust/1000).toFixed(2);
-      $('fuel').textContent=result.fuel.toFixed(3);
-      $('temperature').textContent=result.temperatures[2].toFixed(0);
-      $('pressure').textContent=(result.pressures[2]/1000).toFixed(0);
-      const delta=(result.thrust-healthy.thrust)/healthy.thrust*100;
-      $('thrust-delta').textContent=controls.compressor_loss>0?`정상 대비 ${delta.toFixed(1)}%`:'정상 기준 상태';
-      $('healthy').textContent=(healthy.thrust/1000).toFixed(2)+' kN';
-      $('current').textContent=(result.thrust/1000).toFixed(2)+' kN';
-      $('efficiency').textContent=(result.efficiency*100).toFixed(2)+'%';
-      drawChart(result.temperatures);
-      $('stations').innerHTML=names.map((name,i)=>`<div>${name}<b>${result.temperatures[i].toFixed(0)} K</b><small>${(result.pressures[i]/1000).toFixed(1)} kPa</small></div>`).join('');
-      $('save').disabled=false;
-      if(viewer){viewer.power=controls.power;viewer.loss=controls.compressor_loss;}
-      document.querySelectorAll('[data-preset]').forEach(b=>b.classList.toggle('selected',keys.every(k=>controls[k]===presets[b.dataset.preset][k])));
-    }catch(error){result=null;$('notice').textContent=error.message;$('save').disabled=true;}
-  }
-  function drawChart(temps){
-    const W=620,H=180,left=45,top=20,base=155;
-    const x=i=>left+i*(W-left-25)/4,y=t=>base-t/1700*(base-top);
-    const pts=temps.map((v,i)=>`${x(i)},${y(v)}`).join(' ');
-    let svg=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="各 지점 전온도: ${temps.map(t=>t.toFixed(0)).join(', ')} 켈빈"><defs><linearGradient id="fill" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#ffab6b" stop-opacity=".19"/><stop offset="1" stop-color="#ffab6b" stop-opacity="0"/></linearGradient></defs>`;
-    for(let t=0;t<=1500;t+=500)svg+=`<line x1="${left}" x2="${W-20}" y1="${y(t)}" y2="${y(t)}" stroke="#243144" stroke-dasharray="3 5"/><text x="0" y="${y(t)+4}" fill="#7b91a9" font-size="10">${t} K</text>`;
-    svg+=`<polygon points="${left},${base} ${pts} ${x(4)},${base}" fill="url(#fill)"/><polyline points="${pts}" fill="none" stroke="#ffab6b" stroke-width="2.5"/>`;
-    temps.forEach((t,i)=>svg+=`<circle cx="${x(i)}" cy="${y(t)}" r="4" fill="#ffab6b"/><text x="${x(i)}" y="${y(t)-11}" text-anchor="middle" font-size="10" fill="#edc4a4">${t.toFixed(0)}</text>`);
-    $('chart').innerHTML=svg+'</svg>';
-  }
-  function setPreset(name){for(const k of keys)$(k).value=presets[name][k];$('notice').textContent='';update();}
-  keys.forEach(k=>$(k).addEventListener('input',()=>{$('notice').textContent='';update();}));
-  document.querySelectorAll('[data-preset]').forEach(b=>b.addEventListener('click',()=>setPreset(b.dataset.preset)));
-  $('pause').addEventListener('click',()=>{if(!viewer)return;viewer.running=!viewer.running;$('pause').textContent=viewer.running?'Ⅱ 회전 일시정지':'▶ 회전 재생';$('pause').setAttribute('aria-pressed',String(!viewer.running));});
-  $('cutaway').addEventListener('change',e=>{if(viewer)viewer.cutaway=e.target.checked;});
-  $('flow').addEventListener('change',e=>{if(viewer)viewer.flow=e.target.checked;});
-  for(const name of ['side','front','home'])$('view-'+name).addEventListener('click',()=>viewer?.view(name));
-  $('reset').addEventListener('click',()=>{setPreset('ground');if(viewer){viewer.view('home');viewer.running=true;viewer.phase=0;viewer.cutaway=true;viewer.flow=true;}$('cutaway').checked=true;$('flow').checked=true;$('pause').textContent='Ⅱ 회전 일시정지';$('pause').setAttribute('aria-pressed','false');});
-  $('fullscreen').addEventListener('click',async()=>{try{if(!document.fullscreenElement){if(!$('viewport').requestFullscreen)throw Error('unsupported');await $('viewport').requestFullscreen();}else await document.exitFullscreen();}catch{$('notice').textContent='전체 화면이 제한된 환경입니다. 브라우저에서 사이트를 직접 열어 주세요.';}});
-  $('save').addEventListener('click',()=>{
-    if(!result)return;
-    const row={...controls,thrust_n:result.thrust,core_thrust_n:result.coreThrust,bypass_thrust_n:result.bypassThrust,fuel_flow_kg_s:result.fuel,core_flow_kg_s:result.mass,compressor_efficiency:result.efficiency};
-    ['inlet','fan','compressor','burner','turbine'].forEach((n,i)=>{row[n+'_total_temperature_k']=result.temperatures[i];row[n+'_total_pressure_pa']=result.pressures[i];});
-    const csv=Object.keys(row).join(',')+'\r\n'+Object.values(row).join(',')+'\r\n';
-    const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
-    const a=document.createElement('a');a.href=url;a.download='engine-result-'+new Date().toISOString().replace(/[:.]/g,'-')+'.csv';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),10000);
-    $('notice').textContent='현재 운전 조건과 계산 결과를 다운로드했습니다.';
-  });
-  update();
+(function(){'use strict';
+ const $=id=>document.getElementById(id),engine=new EngineDynamics.DynamicEngine();
+ let viewer=null,paused=false,rate=1,last=null,sample=0,history=[],baseline=[],scenario=null,chartMode='speed',lastUI=0;
+ try{viewer=new EngineScene.EngineViewer($('viewport'),selectPart);}catch(e){$('render-error').hidden=false;$('render-error').textContent='3D 화면을 열 수 없습니다. Edge/Chrome의 그래픽 가속을 확인하세요. '+e.message;}
+ const fmt=(v,n=1)=>Number(v).toFixed(n);
+ function selectPart(id){const p=EngineScene.PARTS.find(p=>p.id===id);if(!p)return;$('part-name').textContent=p.name;$('part-detail').textContent=p.text;document.querySelectorAll('[data-part]').forEach(b=>b.classList.toggle('active',b.dataset.part===id));viewer?.select(id);}
+ EngineScene.PARTS.forEach(p=>{const b=document.createElement('button');b.textContent=p.name;b.dataset.part=p.id;b.addEventListener('click',()=>selectPart(p.id));$('parts-list').appendChild(b);});selectPart('fan');
+ function sync(){const c=engine.command;$('throttle').value=c.throttle;$('loss').value=c.loss;$('ambient').value=c.ambient-273.15;$('augmentor').checked=c.augmentor;$('throttle-value').textContent=Math.round(c.throttle*100)+'%';$('loss-value').textContent=fmt(c.loss*100)+'%';$('ambient-value').textContent=fmt(c.ambient-273.15,0)+'°C';$('engine-switch').textContent=c.running?'● 운전 중 · 정지':'▶ 엔진 운전 시작';$('engine-switch').classList.toggle('engine-on',c.running);}
+ function stopScenario(){scenario=null;$('scenario-status').textContent='수동 조작';$('stop-scenario').hidden=true;}
+ function manual(){stopScenario();engine.set({throttle:Number($('throttle').value),loss:Number($('loss').value),ambient:Number($('ambient').value)+273.15,augmentor:$('augmentor').checked});sync();}
+ for(const id of ['throttle','loss','ambient'])$(id).addEventListener('input',manual);$('augmentor').addEventListener('change',manual);
+ $('engine-switch').addEventListener('click',()=>{stopScenario();engine.set({running:!engine.command.running});sync();});
+ function reset(){engine.reset();history=[];sample=0;paused=false;last=null;stopScenario();$('pause').textContent='Ⅱ 일시정지';sync();}
+ $('reset').addEventListener('click',()=>{reset();$('notice').textContent=baseline.length?'초기화했습니다. 저장된 기준선은 유지됩니다.':'초기 조건으로 돌아왔습니다.';});
+ $('pause').addEventListener('click',()=>{paused=!paused;$('pause').textContent=paused?'▶ 시뮬레이션 재생':'Ⅱ 일시정지';});
+ document.querySelectorAll('[data-rate]').forEach(b=>b.addEventListener('click',()=>{rate=Number(b.dataset.rate);document.querySelectorAll('[data-rate]').forEach(x=>x.classList.toggle('active',x===b));}));
+ document.querySelectorAll('[data-view]').forEach(b=>b.addEventListener('click',()=>{viewer?.view(b.dataset.view);document.querySelectorAll('[data-view]').forEach(x=>x.classList.toggle('active',x===b));}));
+ $('camera-reset').addEventListener('click',()=>viewer?.view('iso'));
+ for(const [id,key] of [['cutaway','cutaway'],['flow','flow'],['heat','heat']])$(id).addEventListener('change',e=>{if(viewer)viewer[key]=e.target.checked;});
+ $('explode').addEventListener('input',e=>{if(viewer)viewer.explode=Number(e.target.value);});
+ $('chart-mode').addEventListener('change',e=>{chartMode=e.target.value;drawChart();});
+ document.querySelectorAll('[data-scenario]').forEach(b=>b.addEventListener('click',()=>{reset();scenario={type:b.dataset.scenario,stage:-1};$('stop-scenario').hidden=false;$('notice').textContent='자동 실험을 시작했습니다. 입력을 조절하면 수동으로 전환됩니다.';}));
+ $('stop-scenario').addEventListener('click',stopScenario);
+ function runScenario(){if(!scenario)return;const t=engine.time,thermal=scenario.type==='thermal';
+  const stage=thermal?(t<3?0:t<18?1:t<50?2:3):(t<4?0:t<17?1:t<27?2:t<40?3:4);
+  if(stage===scenario.stage)return;scenario.stage=stage;
+  if(thermal){if(stage===0)engine.set({throttle:.15});if(stage===1)engine.set({throttle:.85,augmentor:true});if(stage===2)engine.set({running:false,augmentor:false});if(stage===3){stopScenario();return;}}
+  else{if(stage===0)engine.set({throttle:.15});if(stage===1)engine.set({throttle:.9});if(stage===2)engine.set({throttle:.2});if(stage===3)engine.set({running:false});if(stage===4){stopScenario();return;}}
+  $('scenario-status').textContent=(thermal?'열 응답':'가속·감속')+' · '+(stage+1)+'단계';sync();
+ }
+ function record(){history.push({...engine.outputs});if(history.length>12000)history.shift();}
+ $('baseline').addEventListener('click',()=>{if(history.length<2){$('notice').textContent='잠시 운전한 뒤 기준선을 저장해 주세요.';return;}baseline=history.map(p=>({...p}));$('notice').textContent='기준선을 저장했습니다. 초기화 후 다른 조건으로 비교하세요.';});
+ $('download').addEventListener('click',()=>{const records=history.length?history:[engine.outputs];const columns=['time','throttle','running','loss','ambient','lp','hp','gas','metal','compressor','exhaust','pressureRatio','response','fuel','nozzle','augment'];
+  const lines=['model_kind,'+columns.join(','),...records.map(r=>'educational_reduced_order,'+columns.map(k=>typeof r[k]==='number'?r[k].toFixed(6):r[k]).join(','))];
+  const blob=new Blob(['\ufeff'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='engine-experiment-'+new Date().toISOString().replace(/[:.]/g,'-')+'.csv';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);$('notice').textContent=records.length+'개 시점의 교육용 모델 기록을 저장했습니다.';
+ });
+ for(const id of ['evidence','source-open'])$(id).addEventListener('click',()=>{if($('sources').showModal)$('sources').showModal();else $('sources').setAttribute('open','');});
+ $('close-sources').addEventListener('click',()=>$('sources').close());
+ const exit=document.createElement('button');exit.textContent='전체 화면 닫기';exit.className='fs-exit';exit.hidden=true;$('viewport').appendChild(exit);exit.addEventListener('click',()=>document.exitFullscreen());
+ document.addEventListener('fullscreenchange',()=>{exit.hidden=!document.fullscreenElement;});
+ $('fullscreen').addEventListener('click',async()=>{try{await $('viewport').requestFullscreen();}catch{$('notice').textContent='전체 화면이 제한된 환경입니다. 사이트를 별도 탭에서 열어 주세요.';}});
+ function paint(){const o=engine.outputs;for(const k of ['lp','hp','gas','metal'])$(k).textContent=fmt(o[k],k==='gas'||k==='metal'?0:1);$('lp-bar').style.width=Math.min(100,o.lp)+'%';$('hp-bar').style.width=Math.min(100,o.hp)+'%';$('response').textContent=fmt(o.response)+' / 기준 100';$('nozzle-value').textContent=fmt(o.nozzle*100,0)+'%';$('clock').textContent=String(Math.floor(o.time/60)).padStart(2,'0')+':'+fmt(o.time%60).padStart(4,'0');$('status').textContent=paused?'시간 정지':engine.command.running?'운전 중':'감속 · 냉각 중';drawChart();}
+ function drawChart(){const canvas=$('chart'),ctx=canvas.getContext('2d');if(!ctx)return;const r=canvas.getBoundingClientRect(),w=r.width||600,h=170,dpr=Math.min(devicePixelRatio||1,2);if(canvas.width!==Math.round(w*dpr)||canvas.height!==h*dpr){canvas.width=Math.round(w*dpr);canvas.height=h*dpr;}ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,h);
+  const keys=chartMode==='thermal'?['gas','metal']:chartMode==='response'?['response']:['lp','hp'];const max=chartMode==='thermal'?1500:chartMode==='response'?130:110;const colors=chartMode==='thermal'?['#e8ae72','#de7d67']:['#79d8c2','#80aff5'];
+  const end=Math.max(10,engine.time),start=Math.max(0,end-60),left=40,right=w-12,top=15,bottom=145,x=t=>left+(t-start)/(end-start)*(right-left),y=v=>bottom-v/max*(bottom-top);
+  ctx.font='9px Segoe UI';ctx.lineWidth=1;for(let i=0;i<=3;i++){const v=max*i/3,yy=y(v);ctx.strokeStyle='#233446';ctx.beginPath();ctx.moveTo(left,yy);ctx.lineTo(right,yy);ctx.stroke();ctx.fillStyle='#657e95';ctx.fillText(Math.round(v),0,yy+3);}
+  for(let i=0;i<=4;i++){const t=start+(end-start)*i/4;ctx.fillStyle='#657e95';ctx.fillText(Math.round(t)+' s',x(t)-8,162);}
+  function trace(data,key,color,dashed){ctx.save();ctx.beginPath();ctx.rect(left,top,right-left,bottom-top);ctx.clip();ctx.strokeStyle=color;ctx.lineWidth=dashed?1:1.8;ctx.globalAlpha=dashed?.4:1;ctx.setLineDash(dashed?[4,4]:[]);ctx.beginPath();let begun=false;for(const p of data){if(p.time<start||p.time>end)continue;if(!begun){ctx.moveTo(x(p.time),y(p[key]));begun=true;}else ctx.lineTo(x(p.time),y(p[key]));}ctx.stroke();ctx.restore();}
+  keys.forEach((k,i)=>{if(baseline.length)trace(baseline,k,colors[i],true);trace(history,k,colors[i],false);});$('chart-legend').textContent=(chartMode==='thermal'?'● 가스　● 금속 [K]':chartMode==='response'?'● 교육용 응답 지수':'● N₁　● N₂ [%]')+(baseline.length?'　┄ 저장 기준선':'');
+ }
+ function frame(now){const elapsed=last===null?0:Math.min((now-last)/1000,.10);last=now;let dt=paused||document.hidden?0:elapsed*rate;
+  while(dt>1e-9){runScenario();const h=Math.min(.01,dt);engine.step(h);sample+=h;if(sample>=.1-1e-9){record();sample-=.1;}dt-=h;}
+  try{viewer?.update(engine.outputs,paused||document.hidden?0:elapsed*rate);}catch(e){$('render-error').hidden=false;$('render-error').textContent='3D 렌더링 오류: '+e.message;viewer=null;}
+  if(now-lastUI>100){paint();lastUI=now;}requestAnimationFrame(frame);
+ }
+ sync();record();paint();requestAnimationFrame(frame);
+ rootState();function rootState(){globalThis.engineLab={engine,getHistory:()=>history.map(r=>({...r})),getBaseline:()=>baseline.map(r=>({...r})),getViewer:()=>viewer};}
 })();

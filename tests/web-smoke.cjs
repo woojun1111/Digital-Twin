@@ -1,29 +1,12 @@
-// No browser dependency. Checks model and UI handlers with a minimal DOM.
-const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict'),path=require('node:path');
-const root=path.resolve(process.argv[2]||'web');
-vm.runInThisContext(fs.readFileSync(path.join(root,'model.js'),'utf8'));
-if(process.argv[3]){
- const expected=JSON.parse(fs.readFileSync(process.argv[3]));
- for(const e of expected){const r=EngineModel.simulate(e.controls);assert.ok(Math.abs(r.thrust-e.thrust)<1e-7);assert.ok(Math.abs(r.fuel-e.fuel)<1e-10);r.temperatures.forEach((t,i)=>assert.ok(Math.abs(t-e.temperatures[i])<1e-8));}
- console.log('Python / JavaScript parity:',expected.length,'operating points passed');
-}
-assert.throws(()=>EngineModel.simulate({power:NaN,altitude_m:0,mach:0,compressor_loss:0}));
-const noop=()=>{},ctx=new Proxy({}, {get:(t,k)=>t[k]||noop,set:(t,k,v)=>(t[k]=v,true)});
-const elements={};function element(id){return elements[id]??=( {id,value:0,checked:true,listeners:{},dataset:{},classList:{toggle:noop},textContent:'',innerHTML:'',
- addEventListener(n,f){this.listeners[n]=f},setAttribute(n,v){this[n]=v},getContext:()=>ctx,getBoundingClientRect:()=>({width:900,height:450}),setPointerCapture:noop,click(){this.clicked=true},remove:noop});}
-Object.entries({power:.75,altitude_m:0,mach:0,compressor_loss:0}).forEach(([k,v])=>element(k).value=v);
-const presets=['ground','cruise','degraded'].map(name=>({...element('preset-'+name),dataset:{preset:name}}));
-let anchor;global.document={getElementById:element,querySelectorAll:()=>presets,body:{appendChild:noop},createElement:()=>anchor=element('download')};
-global.devicePixelRatio=1;global.ResizeObserver=class{observe(){}};global.requestAnimationFrame=noop;
-global.setTimeout=f=>f();
-vm.runInThisContext(fs.readFileSync(path.join(root,'viewer.js'),'utf8'));
+const fs=require('node:fs'),vm=require('node:vm'),path=require('node:path'),assert=require('node:assert/strict');const root=path.resolve(process.argv[2]||'web');
+const noop=()=>{},ctx=new Proxy({}, {get:(t,k)=>t[k]||noop,set:(t,k,v)=>(t[k]=v,true)}),els={},parts=[];
+function el(id){return els[id]??={id,value:0,style:{},hidden:false,checked:true,dataset:{},listeners:{},classList:{toggle:noop},textContent:'',addEventListener(k,f){this.listeners[k]=f},setAttribute(k,v){this[k]=v},prepend:noop,appendChild(b){if(id==='parts-list')parts.push(b)},getContext:()=>ctx,getBoundingClientRect:()=>({width:700,height:170}),click(){this.clicked=true},remove:noop,showModal(){this.open=true},close(){this.open=false}};}
+const rates=['.25','1','2'].map(v=>({...el('rate'+v),dataset:{rate:v}})),views=['iso','side','front'].map(v=>({...el(v),dataset:{view:v}})),scenarios=['ramp','thermal'].map(v=>({...el(v),dataset:{scenario:v}}));
+let anchor,frame;global.document={hidden:false,getElementById:el,querySelectorAll:s=>s==='[data-part]'?parts:s==='[data-rate]'?rates:s==='[data-view]'?views:scenarios,createElement:()=>anchor={...el('new'+Math.random())},body:{appendChild:noop},addEventListener:noop};
+global.devicePixelRatio=1;global.requestAnimationFrame=cb=>frame=cb;global.setTimeout=cb=>cb();
+vm.runInThisContext(fs.readFileSync(path.join(root,'model.js'),'utf8'));vm.runInThisContext(fs.readFileSync(path.join(root,'viewer.js'),'utf8'));
+EngineScene.EngineViewer=class{select(){} view(){} update(){}};
 vm.runInThisContext(fs.readFileSync(path.join(root,'app.js'),'utf8'));
-const baseline=Number(element('thrust').textContent);
-presets[2].listeners.click();assert.ok(Number(element('thrust').textContent)<baseline);assert.equal(Number(element('compressor_loss').value),.1);
-presets[1].listeners.click();assert.equal(Number(element('altitude_m').value),10000);assert.ok(Number.isFinite(Number(element('thrust').textContent)));
-element('pause').listeners.click();assert.equal(element('pause')['aria-pressed'],'true');
-element('save').listeners.click();assert.ok(anchor.clicked);assert.ok(anchor.download.endsWith('.csv'));
-element('reset').listeners.click();assert.equal(Number(element('compressor_loss').value),0);assert.equal(element('pause')['aria-pressed'],'false');assert.equal(Number(element('thrust').textContent),baseline);
-const viewer=new EngineViewer(element('test-canvas'));viewer.frame(0);viewer.frame(100);assert.ok(viewer.faces.length>200);const phase=viewer.phase;viewer.running=false;viewer.frame(200);assert.equal(viewer.phase,phase);
-viewer.view('front');assert.equal(viewer.yaw,Math.PI/2);viewer.draw();viewer.view('home');viewer.draw();
-console.log('UI handlers: presets, sliders, pause, reset, CSV, mesh and camera checks passed. Browser rendering not covered.');
+function frames(n,start=0){for(let i=0;i<n;i++)frame(start+i*1000/60);}
+frames(121);assert.ok(engineLab.engine.time>1.9);el('pause').listeners.click();const t=engineLab.engine.time;frames(60,2100);assert.equal(engineLab.engine.time,t);el('pause').listeners.click();el('throttle').value=.9;el('loss').value=.1;el('ambient').value=15;el('augmentor').checked=true;el('throttle').listeners.input();assert.equal(engineLab.engine.command.throttle,.9);el('baseline').listeners.click();assert.ok(engineLab.getBaseline().length>1);el('reset').listeners.click();assert.equal(engineLab.engine.time,0);assert.ok(engineLab.getBaseline().length>1);el('download').listeners.click();assert.ok(anchor.clicked&&anchor.download.endsWith('.csv'));el('engine-switch').listeners.click();assert.equal(engineLab.engine.command.running,false);el('evidence').listeners.click();assert.equal(el('sources').open,true);el('close-sources').listeners.click();assert.equal(el('sources').open,false);scenarios[0].listeners.click();frames(2401,4000);assert.equal(engineLab.engine.command.running,false);assert.ok(engineLab.getHistory().length>300);
+console.log('PASS UI: time progression, pause, controls, reset, retained baseline, CSV, engine switch, source dialog, automated scenario. Real browser rendering not tested.');
