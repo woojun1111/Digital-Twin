@@ -3,7 +3,7 @@
  let viewer=null,paused=false,rate=1,last=null,sample=0,history=[],baseline=[],scenario=null,chartMode='speed',lastUI=0;
  try{viewer=new EngineScene.EngineViewer($('viewport'),selectPart);}catch(e){$('render-error').hidden=false;$('render-error').textContent='3D 화면을 열 수 없습니다. Edge/Chrome의 그래픽 가속을 확인하세요. '+e.message;}
  const fmt=(v,n=1)=>Number(v).toFixed(n);
- function selectPart(id){const p=EngineScene.PARTS.find(p=>p.id===id);if(!p)return;$('part-name').textContent=p.name;$('part-detail').textContent=p.text;document.querySelectorAll('[data-part]').forEach(b=>b.classList.toggle('active',b.dataset.part===id));viewer?.select(id);}
+ function selectPart(id){const p=EngineScene.PARTS.find(p=>p.id===id);if(!p)return;$('inspect-part').value=id;$('part-name').textContent=p.name;$('part-detail').textContent=p.text;document.querySelectorAll('[data-part]').forEach(b=>b.classList.toggle('active',b.dataset.part===id));viewer?.select(id);}
  EngineScene.PARTS.forEach(p=>{const b=document.createElement('button');b.textContent=p.name;b.dataset.part=p.id;b.addEventListener('click',()=>selectPart(p.id));$('parts-list').appendChild(b);});selectPart('fan');
  function sync(){const c=engine.command;$('throttle').value=c.throttle;$('loss').value=c.loss;$('ambient').value=c.ambient-273.15;$('augmentor').checked=c.augmentor;$('throttle-value').textContent=Math.round(c.throttle*100)+'%';$('loss-value').textContent=fmt(c.loss*100)+'%';$('ambient-value').textContent=fmt(c.ambient-273.15,0)+'°C';$('engine-switch').textContent=c.running?'● 운전 중 · 정지':'▶ 엔진 운전 시작';$('engine-switch').classList.toggle('engine-on',c.running);}
  function stopScenario(){scenario=null;$('scenario-status').textContent='수동 조작';$('stop-scenario').hidden=true;}
@@ -15,6 +15,15 @@
  $('pause').addEventListener('click',()=>{paused=!paused;$('pause').textContent=paused?'▶ 시뮬레이션 재생':'Ⅱ 일시정지';});
  document.querySelectorAll('[data-rate]').forEach(b=>b.addEventListener('click',()=>{rate=Number(b.dataset.rate);document.querySelectorAll('[data-rate]').forEach(x=>x.classList.toggle('active',x===b));}));
  document.querySelectorAll('[data-view]').forEach(b=>b.addEventListener('click',()=>{viewer?.view(b.dataset.view);document.querySelectorAll('[data-view]').forEach(x=>x.classList.toggle('active',x===b));}));
+ $('experiment-preset').addEventListener('change',e=>{const configs={nominal:[288.15,0],cold:[253.15,0],hot:[313.15,0],degraded:[288.15,.1]},c=configs[e.target.value];if(!c)return;stopScenario();engine.set({running:true,throttle:.6,augmentor:false,ambient:c[0],loss:c[1]});sync();$('notice').textContent='시험 조건을 적용했습니다. 기존 기록과 이어서 비교합니다.';});
+ $('inspect-part').addEventListener('change',e=>selectPart(e.target.value));
+ $('focus-part').addEventListener('click',()=>viewer?.focus?.());
+ for(const [id,key] of [['isolate','isolate'],['auto-orbit','autoOrbit'],['wireframe','wireframe']])$(id).addEventListener('change',e=>{if(viewer){viewer[key]=e.target.checked;if(key==='isolate'&&e.target.checked)viewer.focus?.();}});
+ for(const [id,key,scale] of [['shell-opacity','shellOpacity',1],['section-angle','sectionAngle',Math.PI/180],['rotor-scale','rotorScale',1]])$(id).addEventListener('input',e=>{if(viewer)viewer[key]=Number(e.target.value)*scale;});
+ $('display-preset').addEventListener('change',e=>{const name=e.target.value,options={section:[true,1,0],exterior:[false,1,0],xray:[false,.2,0],assembly:[true,1,1]},v=options[name];if(!v)return;
+  $('cutaway').checked=v[0];$('shell-opacity').value=v[1];$('explode').value=v[2];$('isolate').checked=false;$('wireframe').checked=false;$('section-angle').value=0;
+  if(viewer){Object.assign(viewer,{cutaway:v[0],shellOpacity:v[1],explode:v[2],isolate:false,wireframe:false,sectionAngle:0});viewer.view('iso');}
+ });
  $('camera-reset').addEventListener('click',()=>viewer?.view('iso'));
  for(const [id,key] of [['cutaway','cutaway'],['flow','flow'],['heat','heat']])$(id).addEventListener('change',e=>{if(viewer)viewer[key]=e.target.checked;});
  $('explode').addEventListener('input',e=>{if(viewer)viewer.explode=Number(e.target.value);});

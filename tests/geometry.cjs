@@ -4,4 +4,10 @@ const v=Object.create(EngineScene.EngineViewer.prototype);Object.assign(v,{root:
 const output={lp:80,hp:95,metal:850,nozzle:.65,augment:1,fuel:.9};v.update(output,.01);
 let meshes=0,triangles=0;v.root.traverse(o=>{if(o.isMesh||o.isPoints){meshes++;for(const n of ['position','normal']){const a=o.geometry.attributes[n];if(a)for(const v of a.array)assert.ok(Number.isFinite(v));}if(o.geometry.index)triangles+=o.geometry.index.count/3;}});
 assert.equal(Object.keys(v.groups).length,6);assert.equal(v.nozzles.length,18);assert.equal(v.rotors.length,12);assert.ok(meshes>100);const p=v.rotors[0].group.rotation.x;v.update(output,0);assert.equal(v.rotors[0].group.rotation.x,p);v.explode=1;v.update(output,0);assert.ok(v.groups.fan.position.x<0&&v.groups.nozzle.position.x>0);v.heat=true;v.update(output,0);assert.ok(v.hotMaterials[0].emissiveIntensity>0);v.cutaway=false;v.update(output,0);assert.equal(v.casingMaterials[0].clippingPlanes.length,0);v.select('compressor');v.update(output,0);assert.ok(!v.selection.box.isEmpty());
+// Inspection tools use real Three.js geometry/camera without a GPU renderer.
+v.isolate=true;v.focus();v.update(output,0);assert.ok(v.groups.compressor.visible);assert.equal(v.groups.fan.visible,false);assert.equal(v.distance,2.1);
+v.isolate=false;v.shellOpacity=.2;v.sectionAngle=Math.PI/2;v.wireframe=true;v.update(output,0);assert.equal(v.casingMaterials[0].opacity,.2);assert.equal(v.casingMaterials[0].transparent,true);assert.equal(v.hotMaterials[0].wireframe,true);
+v.rotorScale=0;const stopped=v.rotors[0].group.rotation.x;v.update(output,.1);assert.equal(v.rotors[0].group.rotation.x,stopped);
+for(const name of ['front','rear','top','bottom','side','iso']){v.view(name);v.update(output,0);assert.ok(v.camera.position.toArray().every(Number.isFinite));assert.equal(v.focused,false);}
+v.autoOrbit=true;const angle=v.theta;v.update(output,.1);assert.ok(v.theta>angle);
 console.log(JSON.stringify({meshOrPointObjects:meshes,baseGeometryTriangles:triangles,rotorRows:v.rotors.length,nozzlePetals:v.nozzles.length,status:'Geometry, finite coordinates, pause, explode, heat, cutaway, selection checks passed. WebGL rendering not tested.'}));
