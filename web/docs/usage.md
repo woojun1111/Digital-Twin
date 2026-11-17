@@ -1,4 +1,4 @@
-# v0.3 실행 및 실험
+# v0.4 실행 및 실험
 
 Edge 또는 Chrome에서 배포 주소를 열거나 `web/index.html`을 엽니다. Windows에서는 `open-web.cmd`를 더블클릭합니다. 라이브러리가 함께 제공되므로 외부 CDN이나 Python 설치가 필요 없습니다. WebGL 지원과 그래픽 가속이 필요합니다.
 
@@ -16,3 +16,7 @@ Edge 또는 Chrome에서 배포 주소를 열거나 `web/index.html`을 엽니�
 그래픽 오류 시: Edge/Chrome 업데이트, 그래픽 가속 사용 여부, 전체 ZIP 압축 해제 여부를 확인합니다. 수치 계산 UI는 3D 초기화 실패 시에도 유지됩니다.
 
 CSV 열: time [s], throttle [0–1], running [boolean], loss [상대 손실], ambient [K], lp/hp [정규화 %], gas/metal/compressor/exhaust [K, 교육용], pressureRatio [교육용], response [무차원], fuel/nozzle/augment [무차원]. 파일의 model_kind는 educational_reduced_order입니다.
+
+## v0.4 열역학 패널
+
+엔진 내부의 에너지 흐름 패널에서 위치별 전온·전압과 가상 정적 추력을 확인하세요. 그래프에서 추력 또는 금속 순열유입을 선택할 수 있습니다. CSV에는 새 물리량과 7개 위치의 전온/전압이 포함됩니다. 추력은 일반 가정 모델의 값이며 F414 성능이 아닙니다. 축은 경험적 지연 모델, 노즐은 수축 노즐 근사입니다. [계산식·가정·검증](physics-v04.md)을 함께 읽어 주세요.

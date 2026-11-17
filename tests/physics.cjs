@@ -1,0 +1,17 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict'),path=require('node:path');
+vm.runInThisContext(fs.readFileSync(path.resolve(process.argv[2]||'web','model.js'),'utf8'));
+const {physics:p,compress,nozzle,cycle,heatRates,DynamicEngine}=EngineDynamics;
+const near=(a,b,tol=1e-8)=>assert.ok(Math.abs(a-b)<=tol,`${a} != ${b}`);
+let count=0;function test(name,fn){fn();count++;console.log('PASS',name);}
+test('ideal compressor analytic pressure ratio and energy',()=>{const a=compress(300,100000,2**3.5,1);near(a.T,600);near(a.P/100000,2**3.5);near(p.cp-p.R,p.cp/p.gamma);});
+test('decreased compressor efficiency raises work',()=>assert.ok(compress(300,1e5,5,.7).T>compress(300,1e5,5,.9).T));
+test('nozzle rejects zero flow and reverse pressure',()=>{assert.equal(nozzle(900,1e5,1e5,5).valid,false);assert.equal(nozzle(900,2e5,1e5,0).thrust,0);});
+test('unchoked nozzle satisfies mass and stagnation energy',()=>{const n=nozzle(900,150000,100000,5);assert.equal(n.choked,false);near(n.P,100000);near(n.P/(p.R*n.T)*n.velocity*n.area,5);near(p.cp*n.T+n.velocity**2/2,p.cp*900);near(n.thrust,5*n.velocity);});
+test('choked nozzle has sonic exit and pressure thrust',()=>{const n=nozzle(900,400000,100000,5);near(n.mach,1);assert.ok(n.choked&&n.P>100000);near(n.thrust-5*n.velocity,(n.P-100000)*n.area);});
+test('nozzle transition is continuous at critical ratio',()=>{const critical=((p.gamma+1)/2)**(p.gamma/(p.gamma-1)),a=nozzle(900,1e5*critical*(1-1e-8),1e5,5),b=nozzle(900,1e5*critical*(1+1e-8),1e5,5);assert.equal(a.choked,false);assert.equal(b.choked,true);near(a.thrust,b.thrust,.001);});
+test('cycle conserves burner energy, turbine shaft power and augmentor energy',()=>{for(const ambient of [253.15,288.15,313.15])for(const loss of [0,.15])for(const fuel of [.12,.5,1])for(const augment of [0,1]){const s={lp:.85,hp:.9,fuel,augment},q=cycle(s,{ambient,loss});near(q.burnerResidual,0,1e-7);near(q.shaftResidual,0,1e-7);const hot=q.coreAir+q.mainFuelFlow,abFuel=q.augmentorFuelFlow;near((hot+abFuel)*p.cp*q.exhaust-hot*p.cp*q.stations[5].T-abFuel*p.burnerEfficiency*p.LHV,0,1e-7);assert.ok(q.stations.every(x=>x.T>0&&x.P>0));}});
+test('heat flux reverses with temperature and vanishes at equilibrium',()=>{near(heatRates(300,300,300,1).net,0);assert.ok(heatRates(400,300,300,1).net<0);assert.ok(heatRates(300,800,300,1).net>0);});
+test('discrete metal energy equals integrated net heat',()=>{const e=new DynamicEngine();e.set({running:false});const before=e.state.metal,q=heatRates(before,e.command.ambient,e.command.ambient,0);e.step(.01);near(p.metalCapacity*(e.state.metal-before),q.net*.01,1e-8);});
+test('shutdown disables reported steady thrust',()=>{const e=new DynamicEngine();e.set({running:false});e.step(.1);assert.equal(e.outputs.cycleValid,false);assert.equal(e.outputs.thrustKN,0);});
+test('operating envelope and step-size convergence',()=>{for(const ambient of [253.15,313.15])for(const loss of [0,.15])for(const throttle of [0,1]){const a=new DynamicEngine(),b=new DynamicEngine();a.set({ambient,loss,throttle,augmentor:true});b.set({ambient,loss,throttle,augmentor:true});for(let i=0;i<2000;i++)a.step(.01);for(let i=0;i<4000;i++)b.step(.005);assert.ok(a.outputs.cycleValid);near(a.outputs.thrustKN,b.outputs.thrustKN,.01);near(a.outputs.metal,b.outputs.metal,.5);for(const st of a.outputs.stations)assert.ok(st.T>0&&st.P>0);}});
+console.log(count+' physics checks passed (equation verification, not F414 validation)');
